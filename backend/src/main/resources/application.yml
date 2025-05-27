@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://192.168.0.36:5432/kbo_baseball
+    username: postgres
+    password: password
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  redis:
+    host: 192.168.0.36
+    port: 6379
+
+server:
+  port: 8080
+
+crawler:
+  schedule: "0 51 21 * * ?" # 매일 오전 1시에 실행

@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: kbo-postgres
+    environment:
+      POSTGRES_DB: kbo_baseball
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: kbo-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # backend:
+  #   build:
+  #     context: ./backend
+  #   container_name: kbo-backend
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   environment:
+  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/kbo_baseball
+  #     SPRING_DATASOURCE_USERNAME: postgres
+  #     SPRING_DATASOURCE_PASSWORD: password
+  #     SPRING_REDIS_HOST: redis
+  #   ports:
+  #     - "8080:8080"
+  #   restart: always
+
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   container_name: kbo-frontend
+  #   depends_on:
+  #     - backend
+  #   ports:
+  #     - "3000:3000"
+  #   restart: always
+
+volumes:
+  postgres_data:
+  redis_data:
