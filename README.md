@@ -4,6 +4,7 @@ KBO 리그 데이터를 기반으로 구단/선수/경기별 타율, 타점, 홈
 
 ## 기술 스택
 
+- **tools**: Cursor AI + IntelliJ
 - **Backend**: Java 19 + Spring Boot 3.x
 - **Frontend**: Next.js 14.x + TypeScript + TailwindCSS
 - **Database**: PostgreSQL
