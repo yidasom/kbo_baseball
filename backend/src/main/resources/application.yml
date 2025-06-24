@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://192.168.0.36:5432/kbo_baseball
+    url: jdbc:postgresql://192.168.0.61:5432/kbo_baseball
     username: postgres
     password: password
     driver-class-name: org.postgresql.Driver
@@ -13,7 +13,7 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
   redis:
-    host: 192.168.0.36
+    host: 192.168.0.61
     port: 6379
 
 server:
