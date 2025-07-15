@@ -100,3 +100,5 @@ gradle-app.setting
 *.hprof
 
 # End of https://www.toptal.com/developers/gitignore/api/java,gradle,nextjs
+
+./backend/src/main/resources/application.yml
