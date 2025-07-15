@@ -136,6 +136,12 @@ export const gameApi = {
     const response = await apiClient.get(`/api/games/${gameId}/innings`);
     return response.data;
   },
+
+  // 실시간 데이터 업데이트
+  updateRealTimeData: async (): Promise<{ status: string; message: string; timestamp: string }> => {
+    const response = await apiClient.post('/api/games/real-time-update');
+    return response.data;
+  },
 };
 
 // 유틸리티 함수들

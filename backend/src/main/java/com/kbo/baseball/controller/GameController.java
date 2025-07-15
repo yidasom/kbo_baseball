@@ -5,6 +5,7 @@ import com.kbo.baseball.model.InningScore;
 import com.kbo.baseball.model.Team;
 import com.kbo.baseball.service.GameService;
 import com.kbo.baseball.service.TeamService;
+import com.kbo.baseball.service.CrawlerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/games")
@@ -23,6 +26,7 @@ public class GameController {
 
     private final GameService gameService;
     private final TeamService teamService;
+    private final CrawlerService crawlerService;
     
     @GetMapping
     public ResponseEntity<List<Game>> getAllGames() {
@@ -69,5 +73,28 @@ public class GameController {
         Game game = gameService.getGameById(gameId);
         List<InningScore> inningScores = gameService.getInningScoresByGame(game);
         return ResponseEntity.ok(inningScores);
+    }
+    
+    @PostMapping("/real-time-update")
+    public ResponseEntity<Map<String, String>> updateRealTimeData() {
+        Map<String, String> response = new HashMap<>();
+        
+        try {
+            // 당일 기준 실시간 데이터 크롤링
+            crawlerService.crawlTodayData();
+            
+            response.put("status", "success");
+            response.put("message", "실시간 데이터 업데이트가 완료되었습니다.");
+            response.put("timestamp", LocalDateTime.now().toString());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            response.put("status", "error");
+            response.put("message", "실시간 데이터 업데이트 중 오류가 발생했습니다: " + e.getMessage());
+            response.put("timestamp", LocalDateTime.now().toString());
+            
+            return ResponseEntity.status(500).body(response);
+        }
     }
 } 

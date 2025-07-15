@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -48,6 +49,11 @@ public class GameService {
     @Transactional(readOnly = true)
     public List<Game> getGamesByStatus(Game.GameStatus status) {
         return gameRepository.findByStatus(status);
+    }
+    
+    @Transactional(readOnly = true)
+    public Optional<Game> getGameByKboKey(String kboGameKey) {
+        return gameRepository.findByKboGameKey(kboGameKey);
     }
     
     @Transactional

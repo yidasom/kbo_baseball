@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://192.168.0.61:5432/kbo_baseball
+    url: jdbc:postgresql://172.30.1.29:5432/kbo_baseball
     username: postgres
     password: password
     driver-class-name: org.postgresql.Driver
@@ -13,11 +13,11 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
   redis:
-    host: 192.168.0.61
+    host: 172.30.1.29
     port: 6379
 
 server:
   port: 8080
 
 crawler:
-  schedule: "0 51 21 * * ?" # 매일 오전 1시에 실행
+  schedule: "0 8 3 * * ?" # 매일 오전 1시에 실행

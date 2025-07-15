@@ -4,6 +4,8 @@ import com.kbo.baseball.model.Game;
 import com.kbo.baseball.model.Player;
 import com.kbo.baseball.model.Team;
 import com.kbo.baseball.repository.PlayerRepository;
+import com.kbo.baseball.dto.KboScheduleResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
@@ -13,14 +15,22 @@ import org.jsoup.select.Elements;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.HashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +41,8 @@ public class CrawlerService {
     private final PlayerService playerService;
     private final GameService gameService;
     private final PlayerRepository playerRepository;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     
     // 새로운 KBO 공식 URL 구조
     private static final String KBO_URL = "https://www.koreabaseball.com";
@@ -39,6 +51,7 @@ public class CrawlerService {
     private static final String PITCHER_STATS_URL = KBO_STATS_URL + "/Player/PitcherBasic/BasicOld.aspx";
     private static final String HITTER_STATS_URL = KBO_STATS_URL + "/Player/HitterBasic/Basic1.aspx";
     private static final String SCHEDULE_URL = KBO_URL + "/Schedule/Schedule.aspx";
+    private static final String KBO_SCHEDULE_API_URL = "https://www.koreabaseball.com/Schedule/Schedule.aspx/GetScheduleList";
     
     // 사용자 에이전트 설정
     private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
@@ -57,6 +70,278 @@ public class CrawlerService {
             log.info("KBO 데이터 크롤링 완료: {}", LocalDateTime.now());
         } catch (Exception e) {
             log.error("크롤링 중 오류 발생", e);
+        }
+    }
+    
+    /**
+     * 당일 기준 실시간 데이터만 크롤링하는 메서드
+     */
+    @Transactional
+    public void crawlTodayData() {
+        log.info("당일 실시간 KBO 데이터 크롤링 시작: {}", LocalDateTime.now());
+        
+        try {
+            // 팀 순위 (실시간 업데이트)
+            crawlTeams();
+            
+            // 당일 경기 일정 및 결과 (실시간 업데이트)
+            crawlTodaySchedule();
+            
+            // 선수 통계는 당일에 반영되지 않을 수 있으므로 팀 순위와 경기 결과만 업데이트
+            log.info("당일 실시간 KBO 데이터 크롤링 완료: {}", LocalDateTime.now());
+        } catch (Exception e) {
+            log.error("당일 실시간 크롤링 중 오류 발생", e);
+            throw new RuntimeException("실시간 데이터 업데이트 실패", e);
+        }
+    }
+    
+    /**
+     * KBO JSON API를 사용하여 경기 일정을 크롤링하는 리팩토링된 메서드
+     */
+    private void crawlSchedule() throws IOException {
+        log.info("KBO JSON API를 사용한 경기 일정 크롤링 시작");
+        
+        LocalDate now = LocalDate.now();
+        
+        // 현재 월과 다음 월의 일정 크롤링
+        for (int monthOffset = 0; monthOffset <= 1; monthOffset++) {
+            LocalDate targetDate = now.plusMonths(monthOffset);
+            String yearMonth = targetDate.format(DateTimeFormatter.ofPattern("yyyyMM"));
+            String todayDate = targetDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            
+            log.info("{} 월 경기 일정 크롤링", yearMonth);
+            
+            try {
+                // KBO JSON API 호출을 위한 요청 파라미터 생성
+                Map<String, Object> requestBody = new HashMap<>();
+                requestBody.put("leagueId", "1");      // ← KBO 리그 ID
+                requestBody.put("seriesId", "");       // ← 시즌 ID (0 = 정규시즌)
+                requestBody.put("teamId", "");         // ← 팀 아이디
+                requestBody.put("month", yearMonth);         // ← YYYYMM 형식 (예: "202406")
+                requestBody.put("gameDate", todayDate);      // ← "2024-06-20"
+                
+                // // HTTP 헤더 설정
+                // HttpHeaders headers = new HttpHeaders();
+                // headers.setContentType(MediaType.APPLICATION_JSON);
+                // headers.set("User-Agent", USER_AGENT);
+                // headers.set("Referer", "https://www.koreabaseball.com/Schedule/Schedule.aspx");
+                
+                // HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
+                
+                // // API 호출
+                // ResponseEntity<KboScheduleResponse> response = restTemplate.exchange(
+                //     KBO_SCHEDULE_API_URL,
+                //     HttpMethod.POST,
+                //     requestEntity,
+                //     KboScheduleResponse.class
+                // );
+                WebClient client = WebClient.builder()
+                .baseUrl("https://www.koreabaseball.com")
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                .defaultHeader(HttpHeaders.REFERER, "https://www.koreabaseball.com/Schedule/Schedule.aspx")
+                .build();
+            
+            String response = client.post()
+                .uri("/ws/Schedule.asmx/GetScheduleList")
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(String.class)
+                .block();
+                
+                if (response != null) {
+                    // response는 JSON 문자열로, { "d": "{\"rows\": [...] }" } 형태임
+                    String innerJson = objectMapper.readTree(response).get("d").asText();
+                
+                    // innerJson을 ScheduleData 객체로 변환
+                    KboScheduleResponse.ScheduleData scheduleData = objectMapper.readValue(innerJson, KboScheduleResponse.ScheduleData.class);
+                
+                    processScheduleData(scheduleData);
+                // if (response.getBody() != null && response.getBody().getData() != null) {
+                //     // JSON 문자열을 ScheduleData 객체로 파싱
+                //     String jsonData = response.getBody().getData();
+                //     KboScheduleResponse.ScheduleData scheduleData = objectMapper.readValue(jsonData, KboScheduleResponse.ScheduleData.class);
+                    
+                //     processScheduleData(scheduleData);
+                } else {
+                    log.warn("{} 월 일정 데이터를 받아올 수 없습니다", yearMonth);
+                }
+                
+            } catch (Exception e) {
+                log.error("{} 월 일정 크롤링 중 오류 발생", yearMonth, e);
+            }
+        }
+        
+        log.info("KBO JSON API를 사용한 경기 일정 크롤링 완료");
+    }
+    
+    /**
+     * KBO JSON API를 사용하여 당일 경기 일정을 크롤링하는 리팩토링된 메서드
+     */
+    private void crawlTodaySchedule() throws IOException {
+        log.info("KBO JSON API를 사용한 당일 경기 데이터 크롤링 시작");
+        
+        LocalDate today = LocalDate.now();
+        String todayDate = today.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        
+        try {
+            // KBO JSON API 호출을 위한 요청 파라미터 생성
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("leId", "1");     // KBO 리그 ID
+            requestBody.put("srId", "0");     // 시즌 ID (0 = 정규시즌)
+            requestBody.put("gameDate", today.format(DateTimeFormatter.ofPattern("yyyyMM"))); // YYYYMM 형식
+            
+            // HTTP 헤더 설정
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("User-Agent", USER_AGENT);
+            headers.set("Referer", "https://www.koreabaseball.com/Schedule/Schedule.aspx");
+            
+            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
+            
+            // API 호출
+            ResponseEntity<KboScheduleResponse> response = restTemplate.exchange(
+                KBO_SCHEDULE_API_URL,
+                HttpMethod.POST,
+                requestEntity,
+                KboScheduleResponse.class
+            );
+            
+            if (response.getBody() != null && response.getBody().getData() != null) {
+                // JSON 문자열을 ScheduleData 객체로 파싱
+                String jsonData = response.getBody().getData();
+                KboScheduleResponse.ScheduleData scheduleData = objectMapper.readValue(jsonData, KboScheduleResponse.ScheduleData.class);
+                
+                // 당일 경기만 필터링해서 처리
+                List<KboScheduleResponse.GameRow> todayGames = scheduleData.getRows().stream()
+                    .filter(game -> todayDate.equals(game.getGameDate()))
+                    .toList();
+                
+                KboScheduleResponse.ScheduleData todayScheduleData = new KboScheduleResponse.ScheduleData();
+                todayScheduleData.setRows(todayGames);
+                todayScheduleData.setTotalCount(todayGames.size());
+                
+                processScheduleData(todayScheduleData);
+                
+            } else {
+                log.warn("당일 경기 데이터를 받아올 수 없습니다");
+            }
+            
+        } catch (Exception e) {
+            log.error("당일 경기 크롤링 중 오류 발생", e);
+            throw new IOException("당일 경기 데이터 크롤링 실패", e);
+        }
+        
+        log.info("KBO JSON API를 사용한 당일 경기 데이터 크롤링 완료");
+    }
+    
+    /**
+     * 크롤링한 스케줄 데이터를 처리하는 공통 메서드
+     */
+    private void processScheduleData(KboScheduleResponse.ScheduleData scheduleData) {
+        for (KboScheduleResponse.GameRow gameRow : scheduleData.getRows()) {
+            try {
+                // 팀 이름으로 팀 정보 조회
+                Optional<Team> homeTeam = teamService.getTeamByName(gameRow.getHomeTeamName());
+                Optional<Team> awayTeam = teamService.getTeamByName(gameRow.getAwayTeamName());
+                
+                if (homeTeam.isEmpty() || awayTeam.isEmpty()) {
+                    log.warn("팀 정보를 찾을 수 없습니다: {} vs {}", gameRow.getAwayTeamName(), gameRow.getHomeTeamName());
+                    continue;
+                }
+                
+                // KBO 게임 키로 기존 경기 확인
+                Optional<Game> existingGame = gameService.getGameByKboKey(gameRow.getGameKey());
+                
+                Game game;
+                if (existingGame.isPresent()) {
+                    game = existingGame.get();
+                } else {
+                    game = new Game();
+                    game.setKboGameKey(gameRow.getGameKey());
+                    game.setHomeTeam(homeTeam.get());
+                    game.setAwayTeam(awayTeam.get());
+                    game.setStadium(gameRow.getStadium());
+                    
+                    // 경기 날짜 및 시간 설정
+                    LocalDateTime gameDateTime = parseKboDateTime(gameRow.getGameDate(), gameRow.getGameTime());
+                    game.setGameDate(gameDateTime);
+                    
+                    log.info("새로운 경기 생성: {} vs {} @ {} ({})", 
+                            gameRow.getAwayTeamName(), gameRow.getHomeTeamName(), 
+                            gameRow.getStadium(), gameDateTime);
+                }
+                
+                // 경기 상태 및 점수 업데이트
+                updateGameStatus(game, gameRow);
+                
+                gameService.saveGame(game);
+                
+            } catch (Exception e) {
+                log.error("경기 데이터 처리 중 오류: {}", gameRow.getGameKey(), e);
+            }
+        }
+    }
+    
+    /**
+     * KBO 날짜/시간 형식을 LocalDateTime으로 변환
+     */
+    private LocalDateTime parseKboDateTime(String dateStr, String timeStr) {
+        try {
+            // dateStr: "20250103", timeStr: "1800"
+            int year = Integer.parseInt(dateStr.substring(0, 4));
+            int month = Integer.parseInt(dateStr.substring(4, 6));
+            int day = Integer.parseInt(dateStr.substring(6, 8));
+            
+            int hour = Integer.parseInt(timeStr.substring(0, 2));
+            int minute = timeStr.length() >= 4 ? Integer.parseInt(timeStr.substring(2, 4)) : 0;
+            
+            return LocalDateTime.of(year, month, day, hour, minute);
+            
+        } catch (Exception e) {
+            log.warn("KBO 날짜/시간 파싱 실패: {} {}, 현재 시간 사용", dateStr, timeStr);
+            return LocalDateTime.now();
+        }
+    }
+    
+    /**
+     * KBO API 데이터를 기반으로 게임 상태 업데이트
+     */
+    private void updateGameStatus(Game game, KboScheduleResponse.GameRow gameRow) {
+        // 취소/연기 상태 확인
+        if ("Y".equals(gameRow.getCancelFlag())) {
+            game.setStatus(Game.GameStatus.CANCELED);
+            return;
+        }
+        
+        if ("Y".equals(gameRow.getPostponeFlag())) {
+            game.setStatus(Game.GameStatus.POSTPONED);
+            return;
+        }
+        
+        // 점수 정보가 있는 경우
+        if (gameRow.getHomeScore() != null && !gameRow.getHomeScore().trim().isEmpty() &&
+            gameRow.getAwayScore() != null && !gameRow.getAwayScore().trim().isEmpty()) {
+            
+            try {
+                game.setHomeScore(Integer.parseInt(gameRow.getHomeScore()));
+                game.setAwayScore(Integer.parseInt(gameRow.getAwayScore()));
+                
+                // 상태에 따른 경기 상태 설정
+                if ("종료".equals(gameRow.getStatus())) {
+                    game.setStatus(Game.GameStatus.COMPLETED);
+                } else {
+                    game.setStatus(Game.GameStatus.IN_PROGRESS);
+                    // 진행중인 경기의 이닝 정보 설정
+                    game.setCurrentInning(gameRow.getInning());
+                    game.setTopBottom(gameRow.getTopBottom());
+                }
+                
+            } catch (NumberFormatException e) {
+                game.setStatus(Game.GameStatus.SCHEDULED);
+            }
+        } else {
+            game.setStatus(Game.GameStatus.SCHEDULED);
         }
     }
     
@@ -300,118 +585,6 @@ public class CrawlerService {
         }
         
         log.info("타자 데이터 크롤링 완료");
-    }
-    
-    private void crawlSchedule() throws IOException {
-        log.info("경기 일정 크롤링 시작");
-        
-        LocalDate now = LocalDate.now();
-        
-        // 현재 월과 다음 월의 일정 크롤링
-        for (int monthOffset = 0; monthOffset <= 1; monthOffset++) {
-            LocalDate targetDate = now.plusMonths(monthOffset);
-            String year = String.valueOf(targetDate.getYear());
-            String month = String.format("%02d", targetDate.getMonthValue());
-            
-            String scheduleUrl = SCHEDULE_URL + "?gameDate=" + year + "-" + month;
-            
-            log.info("{}-{} 월 경기 일정 크롤링", year, month);
-            
-            Document doc = Jsoup.connect(scheduleUrl)
-                    .userAgent(USER_AGENT)
-                    .timeout(10000)
-                    .get();
-            
-            Elements scheduleTables = doc.select("div.schedule-wrap div.sch-wrap");
-            
-            for (Element scheduleTable : scheduleTables) {
-                try {
-                    Element dateElement = scheduleTable.selectFirst("h4");
-                    if (dateElement == null) continue;
-                    
-                    String dateText = dateElement.text().trim();
-                    if (dateText.isEmpty()) continue;
-                    
-                    // 날짜 형식: "2023.04.15 (토)"
-                    String[] dateParts = dateText.split("\\s+")[0].split("\\.");
-                    if (dateParts.length < 3) continue;
-                    
-                    int yearVal = Integer.parseInt(dateParts[0]);
-                    int monthVal = Integer.parseInt(dateParts[1]);
-                    int dayVal = Integer.parseInt(dateParts[2]);
-                    
-                    LocalDate gameDate = LocalDate.of(yearVal, monthVal, dayVal);
-                    
-                    Elements gameElements = scheduleTable.select("div.schedule-game");
-                    for (Element gameElement : gameElements) {
-                        Element timeElement = gameElement.selectFirst("div.time");
-                        Element awayElement = gameElement.selectFirst("div.away span.team-name");
-                        Element homeElement = gameElement.selectFirst("div.home span.team-name");
-                        Element stadiumElement = gameElement.selectFirst("div.place");
-                        
-                        if (timeElement == null || awayElement == null || homeElement == null || stadiumElement == null) continue;
-                        
-                        String timeText = timeElement.text().trim();
-                        String awayTeamName = awayElement.text().trim();
-                        String homeTeamName = homeElement.text().trim();
-                        String stadium = stadiumElement.text().trim();
-                        
-                        Optional<Team> awayTeam = teamService.getTeamByName(awayTeamName);
-                        Optional<Team> homeTeam = teamService.getTeamByName(homeTeamName);
-                        
-                        if (awayTeam.isEmpty() || homeTeam.isEmpty()) {
-                            log.warn("팀 정보를 찾을 수 없음: {} vs {}", awayTeamName, homeTeamName);
-                            continue;
-                        }
-                        
-                        // 시간 파싱
-                        LocalDateTime gameDateTime;
-                        if (timeText.equalsIgnoreCase("취소") || timeText.equalsIgnoreCase("미정")) {
-                            continue;
-                        } else {
-                            String[] timeParts = timeText.split(":");
-                            if (timeParts.length != 2) continue;
-                            
-                            int hour = Integer.parseInt(timeParts[0]);
-                            int minute = Integer.parseInt(timeParts[1]);
-                            gameDateTime = LocalDateTime.of(gameDate, java.time.LocalTime.of(hour, minute));
-                        }
-                        
-                        // 이미 존재하는 경기인지 확인
-                        List<Game> existingGames = gameService.getGamesByDateRange(
-                            gameDateTime.withHour(0).withMinute(0),
-                            gameDateTime.withHour(23).withMinute(59)
-                        );
-                        
-                        boolean exists = false;
-                        for (Game existingGame : existingGames) {
-                            if (existingGame.getHomeTeam().getId().equals(homeTeam.get().getId()) &&
-                                existingGame.getAwayTeam().getId().equals(awayTeam.get().getId())) {
-                                exists = true;
-                                break;
-                            }
-                        }
-                        
-                        if (!exists) {
-                            Game game = new Game();
-                            game.setHomeTeam(homeTeam.get());
-                            game.setAwayTeam(awayTeam.get());
-                            game.setGameDate(gameDateTime);
-                            game.setStadium(stadium);
-                            game.setStatus(Game.GameStatus.SCHEDULED);
-                            
-                            gameService.saveGame(game);
-                            log.info("새 경기 일정 저장: {} vs {} @ {} ({})", 
-                                    awayTeamName, homeTeamName, stadium, gameDateTime);
-                        }
-                    }
-                } catch (Exception e) {
-                    log.error("경기 일정 처리 중 오류", e);
-                }
-            }
-        }
-        
-        log.info("경기 일정 크롤링 완료");
     }
     
     // 유틸리티 메서드

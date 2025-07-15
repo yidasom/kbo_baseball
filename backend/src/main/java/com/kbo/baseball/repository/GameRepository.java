@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface GameRepository extends JpaRepository<Game, Long> {
@@ -17,6 +18,8 @@ public interface GameRepository extends JpaRepository<Game, Long> {
     List<Game> findByHomeTeamOrAwayTeam(Team homeTeam, Team awayTeam);
     
     List<Game> findByStatus(Game.GameStatus status);
+    
+    Optional<Game> findByKboGameKey(String kboGameKey);
     
     @Query("SELECT g FROM Game g WHERE (g.homeTeam = :team OR g.awayTeam = :team) AND g.gameDate BETWEEN :startDate AND :endDate")
     List<Game> findTeamGamesByDateRange(@Param("team") Team team, 
