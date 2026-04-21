@@ -1,10 +1,17 @@
 package com.kbo.baseball.controller;
 
+import com.kbo.baseball.dto.InstagramPostResponse;
+import com.kbo.baseball.dto.TeamInstagramResponse;
+import com.kbo.baseball.model.SocialPost;
 import com.kbo.baseball.model.Team;
 import com.kbo.baseball.service.TeamService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -15,29 +22,42 @@ import java.util.List;
 public class TeamController {
 
     private final TeamService teamService;
-    
+
     @GetMapping
     public ResponseEntity<List<Team>> getAllTeams() {
-        List<Team> teams = teamService.getAllTeams();
-        return ResponseEntity.ok(teams);
+        return ResponseEntity.ok(teamService.getAllTeams());
     }
-    
+
+    @GetMapping("/instagram")
+    public ResponseEntity<List<TeamInstagramResponse>> getTeamInstagramFeeds() {
+        return ResponseEntity.ok(teamService.getAllTeams().stream()
+                .map(this::toInstagramResponse)
+                .toList());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<Team> getTeamById(@PathVariable Long id) {
-        Team team = teamService.getTeamById(id);
-        return ResponseEntity.ok(team);
+        return ResponseEntity.ok(teamService.getTeamById(id));
     }
-    
-    @GetMapping("/standings")
-    public ResponseEntity<List<Team>> getTeamStandings() {
-        List<Team> teams = teamService.getAllTeams();
-        // 승률 순으로 정렬
-        teams.sort((a, b) -> {
-            if (a.getWinningPercentage() == null || b.getWinningPercentage() == null) {
-                return 0;
-            }
-            return Double.compare(b.getWinningPercentage(), a.getWinningPercentage());
-        });
-        return ResponseEntity.ok(teams);
+
+    private TeamInstagramResponse toInstagramResponse(Team team) {
+        return TeamInstagramResponse.builder()
+                .teamId(team.getId())
+                .teamName(team.getName())
+                .instagramUrl(team.getInstagramUrl())
+                .posts(teamService.getLatestInstagramPosts(team).stream()
+                        .map(this::toPostResponse)
+                        .toList())
+                .build();
     }
-} 
+
+    private InstagramPostResponse toPostResponse(SocialPost post) {
+        return InstagramPostResponse.builder()
+                .id(post.getId())
+                .postUrl(post.getPostUrl())
+                .mediaUrl(post.getMediaUrl())
+                .caption(post.getCaption())
+                .publishedAt(post.getPublishedAt() != null ? post.getPublishedAt().toString() : null)
+                .build();
+    }
+}

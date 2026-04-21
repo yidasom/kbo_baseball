@@ -2,9 +2,8 @@ package com.kbo.baseball.repository;
 
 import com.kbo.baseball.model.Game;
 import com.kbo.baseball.model.Team;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -13,19 +12,13 @@ import java.util.Optional;
 
 @Repository
 public interface GameRepository extends JpaRepository<Game, Long> {
-    List<Game> findByGameDateBetween(LocalDateTime start, LocalDateTime end);
-    
-    List<Game> findByHomeTeamOrAwayTeam(Team homeTeam, Team awayTeam);
-    
-    List<Game> findByStatus(Game.GameStatus status);
-    
-    Optional<Game> findByKboGameKey(String kboGameKey);
-    
-    @Query("SELECT g FROM Game g WHERE (g.homeTeam = :team OR g.awayTeam = :team) AND g.gameDate BETWEEN :startDate AND :endDate")
-    List<Game> findTeamGamesByDateRange(@Param("team") Team team, 
-                                       @Param("startDate") LocalDateTime startDate, 
-                                       @Param("endDate") LocalDateTime endDate);
-                                       
-    @Query("SELECT g FROM Game g WHERE g.gameDate >= CURRENT_DATE ORDER BY g.gameDate ASC")
-    List<Game> findUpcomingGames();
-} 
+    List<Game> findByDateBetweenOrderByDateAsc(LocalDateTime start, LocalDateTime end);
+
+    List<Game> findByHomeTeamOrAwayTeamOrderByDateDesc(Team homeTeam, Team awayTeam);
+
+    List<Game> findByStatusOrderByDateAsc(Game.GameStatus status);
+
+    List<Game> findByStatusOrderByDateDesc(Game.GameStatus status, Pageable pageable);
+
+    Optional<Game> findBySourceGameId(String sourceGameId);
+}

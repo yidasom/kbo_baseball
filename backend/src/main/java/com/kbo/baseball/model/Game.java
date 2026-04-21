@@ -7,8 +7,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(name = "games")
@@ -29,8 +27,9 @@ public class Game {
     @ManyToOne
     @JoinColumn(name = "away_team_id", nullable = false)
     private Team awayTeam;
-    
-    private LocalDateTime gameDate;
+
+    @Column(nullable = false)
+    private LocalDateTime date;
     
     private String stadium;
     
@@ -39,22 +38,14 @@ public class Game {
     private Integer awayScore;
     
     @Enumerated(EnumType.STRING)
-    private GameStatus status; // SCHEDULED, IN_PROGRESS, COMPLETED, POSTPONED, CANCELED
-    
-    // KBO API에서 받아온 게임 고유 키 (중복 체크용)
+    private GameStatus status; // scheduled, live, finished, postponed, canceled
+
     @Column(unique = true)
-    private String kboGameKey;
-    
-    // 현재 이닝 정보 (진행중인 경기용)
-    private String currentInning;
-    
-    // 초/말 구분 (진행중인 경기용)
-    private String topBottom;
-    
-    @OneToMany(mappedBy = "game", cascade = CascadeType.ALL)
-    private List<InningScore> inningScores = new ArrayList<>();
-    
+    private String sourceGameId;
+
+    private LocalDateTime updatedAt;
+
     public enum GameStatus {
-        SCHEDULED, IN_PROGRESS, COMPLETED, POSTPONED, CANCELED
+        scheduled, live, finished, postponed, canceled
     }
-} 
+}
